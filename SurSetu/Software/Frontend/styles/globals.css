@@ -1,0 +1,80 @@
+/* Import Leaflet CSS */
+@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+
+html, body, #__next {
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  grid-template-rows: 64px 1fr;
+  grid-template-areas:
+    "header header"
+    "map    panel";
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid #e5e7eb;
+  gap: 12px;
+}
+
+.map {
+  grid-area: map;
+}
+
+.panel {
+  grid-area: panel;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel h3 {
+  margin: 12px 12px 8px;
+}
+
+.monitor {
+  flex: 1;
+  overflow: auto;
+  background: #0b1220;
+  color: #d1d5db;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  padding: 12px;
+  border-top: 1px solid #111827;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+  padding: 12px;
+}
+
+.kpi {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fafafa;
+  font-size: 14px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+}
