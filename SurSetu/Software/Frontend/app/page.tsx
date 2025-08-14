@@ -53,24 +53,20 @@ export default function Page() {
   const [receiver, setReceiver] = useState<LatLng | null>(null);
   const [sender, setSender] = useState<LatLng | null>(null);
   const [route, setRoute] = useState<[number, number][]>([]);
-  const [rawLog, setRawLog] = useState<string>('');
+  const [rawLog, setRawLog] = useState<string[]>([]);
   const [autoFit, setAutoFit] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const monitorEndRef = useRef<HTMLDivElement>(null);
+  const MAX_LOGS = 50; // Keep only the latest 50 logs
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:4000');
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      appendRaw('[WS] Connected');
-    };
-    ws.onclose = () => {
-      appendRaw('[WS] Disconnected');
-    };
-    ws.onerror = () => {
-      appendRaw('[WS] Error');
-    };
+    ws.onopen = () => appendRaw('[WS] Connected');
+    ws.onclose = () => appendRaw('[WS] Disconnected');
+    ws.onerror = () => appendRaw('[WS] Error');
     ws.onmessage = (evt) => {
       try {
         const data: Payload = JSON.parse(evt.data);
@@ -96,8 +92,16 @@ export default function Page() {
   }, []);
 
   function appendRaw(line: string) {
-    setRawLog(prev => (prev ? prev + '\n' + line : line));
+    setRawLog(prev => {
+      const updated = [...prev, line];
+      return updated.slice(-MAX_LOGS); // Keep last N logs
+    });
   }
+
+  // Auto-scroll to bottom when logs update
+  useEffect(() => {
+    monitorEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [rawLog]);
 
   // Compute map center and bounds
   const center = useMemo<L.LatLngExpression>(() => {
@@ -135,7 +139,6 @@ export default function Page() {
           {receiver && <Marker position={[receiver.lat, receiver.lng]} icon={greenIcon} />}
           {sender && <Marker position={[sender.lat, sender.lng]} icon={redIcon} />}
 
-
           {route && route.length > 0 && (
             <Polyline positions={route} weight={5} opacity={0.8} />
           )}
@@ -164,11 +167,27 @@ export default function Page() {
           <button onClick={() => setAutoFit(v => !v)}>
             {autoFit ? 'Disable Auto-Fit' : 'Enable Auto-Fit'}
           </button>
-          <button onClick={() => setRawLog('')}>Clear Monitor</button>
+          <button onClick={() => setRawLog([])}>Clear Monitor</button>
         </div>
 
         <h3>Serial Monitor</h3>
-        <div className="monitor">{rawLog || 'Waiting for serial data...'}</div>
+        <div
+          className="monitor"
+          style={{
+            maxHeight: '250px',
+            overflowY: 'auto',
+            fontFamily: 'monospace',
+            backgroundColor: '#111',
+            color: '#0f0',
+            padding: '10px',
+            borderRadius: '5px'
+          }}
+        >
+          {rawLog.length > 0
+            ? rawLog.map((line, idx) => <div key={idx}>{line}</div>)
+            : 'Waiting for serial data...'}
+          <div ref={monitorEndRef} />
+        </div>
       </aside>
     </div>
   );
