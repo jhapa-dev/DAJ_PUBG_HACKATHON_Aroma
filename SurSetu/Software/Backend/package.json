@@ -1,0 +1,14 @@
+{
+  "name": "backend",
+  "type": "module",
+  "dependencies": {
+    "@serialport/parser-readline": "^12.0.0",
+    "nmea-simple": "^3.3.0",
+    "node-fetch": "^3.3.2",
+    "serialport": "^12.0.0",
+    "ws": "^8.17.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
