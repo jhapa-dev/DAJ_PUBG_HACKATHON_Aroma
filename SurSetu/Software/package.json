@@ -1,0 +1,15 @@
+{
+  "name": "lora-gps-osrm-realtime",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "install-all": "npm install -w backend -w frontend",
+    "start-all": "concurrently -c \"auto\" -n \"backend,frontend\" \"npm run -w backend start\" \"npm run -w frontend dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
