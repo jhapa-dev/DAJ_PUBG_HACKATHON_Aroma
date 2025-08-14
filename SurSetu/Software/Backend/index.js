@@ -2,11 +2,10 @@ import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import fetch from 'node-fetch';
 import { WebSocketServer } from 'ws';
-import { parseNmeaSentence } from 'nmea-simple';
 
 // ====== CONFIG ======
-const SERIAL_PORT = 'COM11'; // Change to your COM port
-const BAUD_RATE = 115200;    // Change to match GPS
+const SERIAL_PORT = 'COM11';
+const BAUD_RATE = 115200;
 const WSS_PORT = 4000;
 const RECEIVER = { lat: 26.636844, lng: 87.985256 };
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
@@ -17,7 +16,6 @@ const MIN_ROUTE_INTERVAL_MS = 3000;
 let lastSender = null;
 let lastRouteAt = 0;
 
-// Simple haversine distance (meters)
 function haversine(a, b) {
   const toRad = d => (d * Math.PI) / 180;
   const R = 6371000;
@@ -51,7 +49,7 @@ async function getRoute(sender) {
 
 // WebSocket server
 const wss = new WebSocketServer({ port: WSS_PORT }, () =>
-  console.log(`WS listening ws://localhost:${WSS_PORT}`)
+  console.log(`✅ WS listening on ws://localhost:${WSS_PORT}`)
 );
 
 function broadcast(obj) {
@@ -61,78 +59,62 @@ function broadcast(obj) {
   }
 }
 
-// Serial setup
+// Serial port
 const port = new SerialPort({ path: SERIAL_PORT, baudRate: BAUD_RATE });
 const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
-port.on('open', () =>
-  console.log(`Serial open on ${SERIAL_PORT} @ ${BAUD_RATE}`)
-);
-
-port.on('error', (err) => console.error('Serial error:', err.message));
-
-// Updated parse function
-function parseLine(line) {
-  const raw = line.trim();
-
-  // Case 1: Extract first two decimal numbers from any text
-  const nums = raw.match(/-?\d+\.\d+/g);
-  if (nums && nums.length >= 2) {
-    const lat = parseFloat(nums[0]);
-    const lng = parseFloat(nums[1]);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-  }
-
-  // Case 2: NMEA sentence
-  if (raw.startsWith('$')) {
-    try {
-      const sentence = parseNmeaSentence(raw);
-      if (sentence?.type === 'GGA' || sentence?.type === 'RMC') {
-        const lat = sentence.latitude;
-        const lng = sentence.longitude;
-        if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-      }
-    } catch {
-      // ignore parse errors
-    }
-  }
-
-  return null;
-}
+port.on('open', () => console.log(`🔌 Serial open on ${SERIAL_PORT} @ ${BAUD_RATE}`));
+port.on('error', (err) => console.error('❌ Serial error:', err.message));
 
 parser.on('data', async (line) => {
-  const raw = line.toString();
-  try {
-    const sender = parseLine(raw);
-    if (sender) {
-      let route = null;
-      try {
-        route = await getRoute(sender);
-      } catch (e) {
-        console.error(e.message);
+  const raw = line.trim();
+  console.log("📥 Received:", raw);
+
+  // Handle GPS location
+  if (raw.startsWith("LOC:")) {
+    // Format: LOC:lat,lng,alt,time
+    const parts = raw.replace("LOC:", "").split(",");
+    if (parts.length >= 2) {
+      const lat = parseFloat(parts[0]);
+      const lng = parseFloat(parts[1]);
+
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const sender = { lat, lng };
+        let route = null;
+
+        try {
+          route = await getRoute(sender);
+        } catch (e) {
+          console.error("Route error:", e.message);
+        }
+
+        lastSender = sender;
+
+        broadcast({
+          type: 'coord',
+          sender,
+          receiver: RECEIVER,
+          route,
+          raw
+        });
       }
-
-      lastSender = sender;
-
+    }
+  }
+  // Handle Emergency Message
+  else if (raw.startsWith("MSG:")) {
+    const text = raw.replace("MSG:", "").trim();
+    if (text) {
       broadcast({
-        type: 'update',
-        sender,
-        receiver: RECEIVER,
-        route,
-        raw
-      });
-    } else {
-      broadcast({
-        type: 'raw',
-        raw
+        type: 'msg',
+        text
       });
     }
-  } catch (e) {
-    console.error('Handler error:', e.message);
   }
 });
 
+// Send initial hello when frontend connects
 wss.on('connection', (ws) => {
+  console.log("🔗 Frontend connected");
   ws.send(JSON.stringify({
     type: 'hello',
     receiver: RECEIVER,
