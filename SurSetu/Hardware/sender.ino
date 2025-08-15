@@ -15,16 +15,14 @@
 #define GPS_RX 16  // GPS TX -> ESP32 RX
 #define GPS_TX 17  // GPS RX -> ESP32 TX
 
-// ---------------- GPS & LoRa Objects ----------------
 NMEAGPS gps;
 gps_fix fix;
 
 // ---------------- Motion Filter Settings ----------------
-#define STATIONARY_SPEED_MPS 0.3   // ~1 km/h
-#define STATIONARY_ENTER_SEC 10    // Time below speed to enter stationary
-#define STATIONARY_EXIT_M    20.0  // Distance from anchor to exit stationary
+#define STATIONARY_SPEED_MPS 0.3
+#define STATIONARY_ENTER_SEC 10
+#define STATIONARY_EXIT_M    20.0
 
-// ---------------- Variables ----------------
 enum MotionState { MOVING, STATIONARY };
 MotionState state = MOVING;
 
@@ -32,15 +30,14 @@ unsigned long stationaryStartMs = 0;
 float anchorLat = 0.0, anchorLon = 0.0;
 
 // ---------------- Simple Moving Average Filter ----------------
-const int AVG_COUNT = 5;   // Number of samples to average
+const int AVG_COUNT = 5;
 float latBuf[AVG_COUNT];
 float lonBuf[AVG_COUNT];
 int bufIndex = 0;
 bool bufFilled = false;
 
-// ---------------- Haversine Function (meters) ----------------
 float haversineM(float lat1, float lon1, float lat2, float lon2) {
-  const float R = 6371000.0; // Earth radius in meters
+  const float R = 6371000.0;
   float dLat = radians(lat2 - lat1);
   float dLon = radians(lon2 - lon1);
   float a = sin(dLat/2) * sin(dLat/2) +
@@ -50,7 +47,6 @@ float haversineM(float lat1, float lon1, float lat2, float lon2) {
   return R * c;
 }
 
-// ---------------- Averaging ----------------
 void addToBuffer(float lat, float lon) {
   latBuf[bufIndex] = lat;
   lonBuf[bufIndex] = lon;
@@ -69,15 +65,19 @@ void getAveraged(float &lat, float &lon) {
   lon = sumLon / count;
 }
 
+void sendLoRaMessage(String data) {
+  LoRa.beginPacket();
+  LoRa.print(data);
+  LoRa.endPacket();
+}
+
 // ---------------- Setup ----------------
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32 LoRa GPS Sender");
+  Serial.println("ESP32 LoRa GPS Sender with Messaging");
 
-  // GPS Serial
   Serial2.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
 
-  // LoRa
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
   LoRa.setPins(LORA_CS, LORA_RST, LORA_IRQ);
   if (!LoRa.begin(LORA_BAND)) {
@@ -89,14 +89,24 @@ void setup() {
 
 // ---------------- Main Loop ----------------
 void loop() {
+  // ----- Handle incoming serial messages -----
+  if (Serial.available()) {
+    String customMsg = Serial.readStringUntil('\n');
+    customMsg.trim();
+    if (customMsg.length() > 0) {
+      String packet = "MSG:" + customMsg;
+      Serial.println("Sending custom message: " + customMsg);
+      sendLoRaMessage(packet);
+    }
+  }
+
+  // ----- Handle GPS -----
   while (gps.available(Serial2)) {
     fix = gps.read();
-
     if (fix.valid.location) {
       float lat = fix.latitude();
       float lon = fix.longitude();
 
-      // Add raw to buffer and get smoothed position
       addToBuffer(lat, lon);
       getAveraged(lat, lon);
 
@@ -114,8 +124,7 @@ void loop() {
         } else {
           stationaryStartMs = 0;
         }
-
-      } else { // STATIONARY
+      } else {
         float dFromAnchor = haversineM(anchorLat, anchorLon, lat, lon);
         bool highSpeed = (fix.valid.speed && ((fix.speed_kph() / 3.6) > STATIONARY_SPEED_MPS));
 
@@ -124,14 +133,12 @@ void loop() {
           stationaryStartMs = 0;
           Serial.println("State -> MOVING (unlock)");
         } else {
-          // Force output to anchor to prevent jitter
           lat = anchorLat;
           lon = anchorLon;
         }
       }
 
-      // Build message
-      String message = String(lat, 6) + "," + String(lon, 6);
+      String message = "LOC:" + String(lat, 6) + "," + String(lon, 6);
       if (fix.valid.altitude) {
         message += "," + String(fix.altitude(), 2) + " m";
       }
@@ -141,10 +148,8 @@ void loop() {
         message += "," + String(timeStr);
       }
 
-      Serial.println("Sending: " + message);
-      LoRa.beginPacket();
-      LoRa.print(message);
-      LoRa.endPacket();
+      Serial.println("Sending location: " + message);
+      sendLoRaMessage(message);
     }
   }
 }
