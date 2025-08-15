@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'LoRa GPS Live Map',
+  title: 'Aroma Hackforce',
   description: 'Sender/Receiver map with OSRM routing and Serial Monitor'
 };
 
