@@ -34,7 +34,6 @@ async function getRoute(sender) {
   const now = Date.now();
   const movedEnough = !lastSender || haversine(lastSender, sender) >= MIN_MOVE_METERS;
   const intervalOk = now - lastRouteAt >= MIN_ROUTE_INTERVAL_MS;
-
   if (!movedEnough && !intervalOk) return null;
 
   const url = `${OSRM_URL}/${sender.lng},${sender.lat};${RECEIVER.lng},${RECEIVER.lat}?overview=full&geometries=geojson`;
@@ -67,42 +66,54 @@ port.on('open', () => console.log(`🔌 Serial open on ${SERIAL_PORT} @ ${BAUD_R
 port.on('error', (err) => console.error('❌ Serial error:', err.message));
 
 parser.on('data', async (line) => {
-  const raw = line.trim();
-  console.log("📥 Received:", raw);
+  let raw = line.toString().trim();
+  // Many devices prepend "Received: " — strip any repeats safely
+  raw = raw.replace(/^(Received:\s*)+/i, '');
+  console.log('📥 Parsed:', raw);
 
   // Handle GPS location
-  if (raw.startsWith("LOC:")) {
+  if (raw.startsWith('LOC:')) {
     // Format: LOC:lat,lng,alt,time
-    const parts = raw.replace("LOC:", "").split(",");
+    const after = raw.slice(4); // drop "LOC:"
+    const parts = after.split(',');
     if (parts.length >= 2) {
       const lat = parseFloat(parts[0]);
       const lng = parseFloat(parts[1]);
 
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
         const sender = { lat, lng };
-        let route = null;
 
-        try {
-          route = await getRoute(sender);
-        } catch (e) {
-          console.error("Route error:", e.message);
-        }
-
-        lastSender = sender;
-
+        // 1) Broadcast immediately so markers update without waiting for OSRM
         broadcast({
           type: 'coord',
           sender,
           receiver: RECEIVER,
-          route,
+          route: null,
           raw
         });
+
+        // 2) Fetch route in the background and broadcast an updated coord with route
+        getRoute(sender)
+          .then((route) => {
+            if (route && route.length) {
+              broadcast({
+                type: 'coord',
+                sender,
+                receiver: RECEIVER,
+                route,
+                raw
+              });
+            }
+          })
+          .catch((e) => console.error('Route error:', e.message));
+
+        lastSender = sender;
       }
     }
   }
-  // Handle Emergency Message
-  else if (raw.startsWith("MSG:")) {
-    const text = raw.replace("MSG:", "").trim();
+  // Handle Emergency/SOS Message (accept both "SOS:" and "MSG:")
+  else if (raw.startsWith('SOS:') || raw.startsWith('MSG:')) {
+    const text = raw.replace(/^(SOS:|MSG:)\s*/i, '').trim();
     if (text) {
       broadcast({
         type: 'msg',
@@ -114,7 +125,7 @@ parser.on('data', async (line) => {
 
 // Send initial hello when frontend connects
 wss.on('connection', (ws) => {
-  console.log("🔗 Frontend connected");
+  console.log('🔗 Frontend connected');
   ws.send(JSON.stringify({
     type: 'hello',
     receiver: RECEIVER,
