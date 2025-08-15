@@ -1,4 +1,4 @@
-import tkinter as tk
+import tkinter as tk 
 from tkinter import scrolledtext
 import serial
 import threading
@@ -45,9 +45,11 @@ def read_from_port():
             if ser.in_waiting > 0:
                 incoming = ser.readline().decode(errors='ignore').strip()
 
-                # Remove "Received:" prefix if present
-                if incoming.startswith("Received:"):
-                    incoming = incoming.split("MSG;", 1)[-1].strip()
+                # Only process messages starting with MSG:
+                if incoming.startswith("Received: MSG:"):
+                    incoming = incoming.split("MSG:", 1)[-1].strip()
+                else:
+                    continue  # Skip coordinates and other data
 
                 # Ignore if it's our own last sent message
                 if incoming and incoming != last_sent_message:
@@ -72,12 +74,11 @@ chat_area = scrolledtext.ScrolledText(
     root,
     wrap=tk.WORD,
     state=tk.DISABLED,
-    font=("Arial", 10),  # smaller font
-    padx=8,  # inside padding
+    font=("Arial", 10),
+    padx=8,
     pady=5
 )
 
-# Sent messages (right aligned, light green background, padding & spacing)
 chat_area.tag_config(
     "sent",
     foreground="black",
@@ -89,7 +90,6 @@ chat_area.tag_config(
     rmargin=10
 )
 
-# Received messages (left aligned, white background, padding & spacing)
 chat_area.tag_config(
     "received",
     foreground="black",
