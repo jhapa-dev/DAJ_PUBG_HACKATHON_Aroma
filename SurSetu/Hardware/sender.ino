@@ -9,7 +9,7 @@
 #define LORA_CS    5
 #define LORA_RST   14
 #define LORA_IRQ   2
-#define LORA_BAND  433E6
+#define LORA_BAND  500E6  // Match frequency with receiver
 
 // ---------------- GPS Pins ----------------
 #define GPS_RX 16  // GPS TX -> ESP32 RX
@@ -36,6 +36,7 @@ float lonBuf[AVG_COUNT];
 int bufIndex = 0;
 bool bufFilled = false;
 
+// ---------------- Haversine Distance ----------------
 float haversineM(float lat1, float lon1, float lat2, float lon2) {
   const float R = 6371000.0;
   float dLat = radians(lat2 - lat1);
@@ -74,7 +75,7 @@ void sendLoRaMessage(String data) {
 // ---------------- Setup ----------------
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32 LoRa GPS Sender with Messaging");
+  Serial.println("ESP32 LoRa GPS Sender with Two-way Messaging");
 
   Serial2.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
 
@@ -89,7 +90,18 @@ void setup() {
 
 // ---------------- Main Loop ----------------
 void loop() {
-  // ----- Handle incoming serial messages -----
+
+  // ----- Check if we received a LoRa message -----
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    String incoming = "";
+    while (LoRa.available()) {
+      incoming += (char)LoRa.read();
+    }
+    Serial.println("Received from receiver: " + incoming);
+  }
+
+  // ----- Handle outgoing custom messages from Serial -----
   if (Serial.available()) {
     String customMsg = Serial.readStringUntil('\n');
     customMsg.trim();
@@ -100,7 +112,7 @@ void loop() {
     }
   }
 
-  // ----- Handle GPS -----
+  // ----- Handle GPS updates -----
   while (gps.available(Serial2)) {
     fix = gps.read();
     if (fix.valid.location) {
