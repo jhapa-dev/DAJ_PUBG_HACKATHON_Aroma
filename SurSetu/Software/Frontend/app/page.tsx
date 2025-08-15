@@ -6,7 +6,6 @@ import '../styles/globals.css';
 import L from 'leaflet';
 import { useMap } from 'react-leaflet';
 
-// Fix default marker icons (Next.js bundling)
 delete L.Icon.Default.prototype._getIconUrl;
 
 const greenIcon = new L.Icon({
@@ -27,7 +26,6 @@ const redIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-// Dynamic import react-leaflet components to avoid SSR issues
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false });
@@ -36,8 +34,8 @@ const Polyline = dynamic(() => import('react-leaflet').then(m => m.Polyline), { 
 type LatLng = { lat: number; lng: number };
 type Payload =
   | { type: 'hello'; receiver: LatLng; sender: LatLng | null; route: [number, number][] | null }
-  | { type: 'update'; receiver: LatLng; sender: LatLng; route: [number, number][] | null; raw: string }
-  | { type: 'raw'; raw: string };
+  | { type: 'coord'; receiver: LatLng; sender: LatLng; route: [number, number][] | null; raw: string }
+  | { type: 'msg'; text: string };
 
 function FitBounds({ bounds }: { bounds: L.LatLngBounds | null }) {
   const map = useMap();
@@ -53,57 +51,50 @@ export default function Page() {
   const [receiver, setReceiver] = useState<LatLng | null>(null);
   const [sender, setSender] = useState<LatLng | null>(null);
   const [route, setRoute] = useState<[number, number][]>([]);
-  const [rawLog, setRawLog] = useState<string[]>([]);
+  const [coordLog, setCoordLog] = useState<string[]>([]);
+  const [msgLog, setMsgLog] = useState<string[]>([]);
   const [autoFit, setAutoFit] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const monitorEndRef = useRef<HTMLDivElement>(null);
-  const MAX_LOGS = 50; // Keep only the latest 50 logs
+  const coordEndRef = useRef<HTMLDivElement>(null);
+  const msgEndRef = useRef<HTMLDivElement>(null);
+  const MAX_LOGS = 50;
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:4000');
     wsRef.current = ws;
 
-    ws.onopen = () => appendRaw('[WS] Connected');
-    ws.onclose = () => appendRaw('[WS] Disconnected');
-    ws.onerror = () => appendRaw('[WS] Error');
     ws.onmessage = (evt) => {
       try {
         const data: Payload = JSON.parse(evt.data);
         if (data.type === 'hello') {
           setReceiver(data.receiver);
           if (data.sender) setSender(data.sender);
-        } else if (data.type === 'update') {
+        } else if (data.type === 'coord') {
           setReceiver(data.receiver);
           setSender(data.sender);
           if (data.route) setRoute(data.route);
-          if (data.raw) appendRaw(data.raw);
-        } else if (data.type === 'raw') {
-          appendRaw(data.raw);
+          appendCoord(data.raw);
+        } else if (data.type === 'msg') {
+          appendMsg(data.text);
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     };
 
-    return () => {
-      ws.close();
-    };
+    return () => ws.close();
   }, []);
 
-  function appendRaw(line: string) {
-    setRawLog(prev => {
-      const updated = [...prev, line];
-      return updated.slice(-MAX_LOGS); // Keep last N logs
-    });
+  function appendCoord(line: string) {
+    setCoordLog(prev => [...prev, line].slice(-MAX_LOGS));
   }
 
-  // Auto-scroll to bottom when logs update
-  useEffect(() => {
-    monitorEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [rawLog]);
+  function appendMsg(line: string) {
+    setMsgLog(prev => [...prev, line].slice(-MAX_LOGS));
+  }
 
-  // Compute map center and bounds
+  useEffect(() => { coordEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [coordLog]);
+  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgLog]);
+
   const center = useMemo<L.LatLngExpression>(() => {
     if (sender) return [sender.lat, sender.lng];
     if (receiver) return [receiver.lat, receiver.lng];
@@ -123,10 +114,7 @@ export default function Page() {
   return (
     <div className="app">
       <header className="header">
-        <h2 style={{ margin: 0 }}>Map of the constant plotting</h2>
-        <div style={{ opacity: 0.7 }}>
-          Receiver fixed at <code>26.636844, 87.985256</code>
-        </div>
+        <h2>GPS & Message Monitor</h2>
       </header>
 
       <div className="map">
@@ -135,60 +123,43 @@ export default function Page() {
             attribution="&copy; Aroma Hackforce"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-
           {receiver && <Marker position={[receiver.lat, receiver.lng]} icon={greenIcon} />}
           {sender && <Marker position={[sender.lat, sender.lng]} icon={redIcon} />}
-
-          {route && route.length > 0 && (
-            <Polyline positions={route} weight={5} opacity={0.8} />
-          )}
-
+          {route && route.length > 0 && <Polyline positions={route} weight={5} opacity={0.8} />}
           {bounds && <FitBounds bounds={bounds} />}
         </MapContainer>
       </div>
 
       <aside className="panel">
-        <div className="kpis">
-          <div className="kpi">
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Sender</div>
-            <div style={{ fontWeight: 600 }}>
-              {sender ? `${sender.lat.toFixed(6)}, ${sender.lng.toFixed(6)}` : '—'}
-            </div>
-          </div>
-          <div className="kpi">
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Receiver</div>
-            <div style={{ fontWeight: 600 }}>
-              {receiver ? `${receiver.lat.toFixed(6)}, ${receiver.lng.toFixed(6)}` : '—'}
-            </div>
-          </div>
-        </div>
-
         <div className="controls">
-          <button onClick={() => setAutoFit(v => !v)}>
-            {autoFit ? 'Disable Auto-Fit' : 'Enable Auto-Fit'}
-          </button>
-          <button onClick={() => setRawLog([])}>Clear Monitor</button>
+          <button onClick={() => setAutoFit(v => !v)}>{autoFit ? 'Disable Auto-Fit' : 'Enable Auto-Fit'}</button>
+          <button onClick={() => setCoordLog([])}>Clear Coords</button>
+          <button onClick={() => setMsgLog([])}>Clear Messages</button>
         </div>
 
-        <h3>Serial Monitor</h3>
-        <div
-          className="monitor"
-          style={{
-            maxHeight: '250px',
-            overflowY: 'auto',
-            fontFamily: 'monospace',
-            backgroundColor: '#111',
-            color: '#0f0',
-            padding: '10px',
-            borderRadius: '5px'
-          }}
-        >
-          {rawLog.length > 0
-            ? rawLog.map((line, idx) => <div key={idx}>{line}</div>)
-            : 'Waiting for serial data...'}
-          <div ref={monitorEndRef} />
+        <h3>Coordinates Monitor</h3>
+        <div className="monitor scrollable">
+          {coordLog.length > 0 ? coordLog.map((line, idx) => <div key={idx}>{line}</div>) : 'Waiting for GPS data...'}
+          <div ref={coordEndRef} />
+        </div>
+
+        <h3>Message Monitor</h3>
+        <div className="monitor scrollable" style={{ color: '#0ff' }}>
+          {msgLog.length > 0 ? msgLog.map((line, idx) => <div key={idx}>{line}</div>) : 'Waiting for messages...'}
+          <div ref={msgEndRef} />
         </div>
       </aside>
+
+      <style jsx>{`
+        .scrollable {
+          max-height: 200px;
+          overflow-y: auto;
+          background: #111;
+          padding: 8px;
+          border: 1px solid #333;
+          border-radius: 4px;
+        }
+      `}</style>
     </div>
   );
 }
