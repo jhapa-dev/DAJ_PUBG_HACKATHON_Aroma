@@ -1,4 +1,4 @@
-# Programmers Unknown Battlegrounds (PUBG) - DAJ
+# Programmers Unknown Battlegrounds (PUBG) - DAJ 
 
 Team: Aroma
 
@@ -23,7 +23,10 @@ This project demonstrates a **LoRa GPS tracking system** with:
 ---
 ## 📡 Data Structures
 
-### LoRa GPS Payload (example from Serial): LAT:27.7172,LON:85.3240
+### LoRa GPS Payload (example from Serial): 
+```
+LAT:27.7172,LON:85.3240
+```
 
 ### Parsed JSON Format in Backend:
 ```json
@@ -32,9 +35,10 @@ This project demonstrates a **LoRa GPS tracking system** with:
   "lon": 85.3240,
   "timestamp": "2025-08-16T06:30:25Z"
 }
+```
 
-
-Websocket message:
+### WebSocket Message:
+```json
 {
   "type": "gps",
   "data": {
@@ -42,78 +46,104 @@ Websocket message:
     "lon": 85.3240
   }
 }
+```
 
-
-OSRM route requess
+### OSRM Route Request:
+```
 http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson
+```
 
+---
 
-⚙️ Installation
-1.	Clone the repo
-git clone https://github.com/your-username/jhapa-dev/DAJ PUBG HAKCATHON Aroma.git
-cd DAJ PUBG HACKATHON Aroma
+## ⚙️ Installation
 
+1. Clone the repo
+```bash
+git clone https://github.com/your-username/jhapa-dev/DAJ-PUBG-HAKCATHON-Aroma.git
+cd DAJ-PUBG-HACKATHON-Aroma
+```
 
-Install dependencies
+2. Install dependencies
 
-# Backend
+**Backend**
+```bash
 cd server
 npm install
+```
 
-# Frontend
+**Frontend**
+```bash
 cd ../next-app
 npm install
+```
 
-# Root (for concurrently)
+**Root (for concurrently)**
+```bash
 cd ..
 npm install concurrently --save-dev 
+```
 
-Setup root package.json
- 
- {
+3. Setup root `package.json`
+```json
+{
   "name": "lora-map-project",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix next-app\" \"npm start --prefix server\""
   }
 }
+```
 
+---
 
-🚀 Running the App
+## 🚀 Running the App
 
 Run frontend + backend together:
-
+```bash
 npm run dev
+```
 OR
+```bash
 npm run start-all
+```
 
+- Backend: `ws://localhost:4000`
+- Frontend: `http://localhost:3000`
 
-Backend: ws://localhost:4000
+---
 
-Frontend: http://localhost:3000
-
-🌍 Routing
+## 🌍 Routing
 
 You can use either:
 
-Online OSRM API:
+**Online OSRM API:**
+```
 https://router.project-osrm.org/route/v1/driving/...
+```
 
-Offline OSRM (Docker) for Nepal or your region:
-
-docker run -t -i -p 5000:5000 osrm/osrm-backend \
-  osrm-routed --algorithm mld /data/nepal-latest.osrm
-
+**Offline OSRM (Docker) for Nepal or your region:**
+```bash
+docker run -t -i -p 5000:5000 osrm/osrm-backend   osrm-routed --algorithm mld /data/nepal-latest.osrm
+```
 
 Then change route URL in frontend to:
-
+```
 http://localhost:5000/route/v1/driving/...
+```
+
+---
+
+## 🔧 Troubleshooting
+
+1. **Serial not opening?** → Make sure your LoRa receiver is on COM11 and baud = 115200.
+
+2. **No map?** → Check Leaflet CSS is imported via `_document.js` instead of `<Head>`.
+
+3. **Route not showing?** → Try the online OSRM first before setting up local.
+
+---
+
+## 🏁 Final Words
+This project was built as part of **PUBG DAJ Hackathon (Team Aroma)** to demonstrate how **LoRa + GPS + Web + Maps** can be combined for real-world tracking solutions in **low-network rural areas**.
 
 
-🔧 Troubleshooting
-
-1. Serial not opening? → Make sure your LoRa receiver is on COM11 and baud = 115200.
-
-2. No map? → Check Leaflet CSS is imported via _document.js instead of <Head>.
-
-3. Route not showing? → Try the online OSRM first before setting up local.
